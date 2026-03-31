@@ -1,120 +1,67 @@
 import Foundation
 
-// MARK: - HTTPMethod
-
-/// Standard HTTP request methods.
-public enum HTTPMethod: String, Sendable {
-    case get    = "GET"
-    case post   = "POST"
-    case put    = "PUT"
-    case patch  = "PATCH"
-    case delete = "DELETE"
-}
-
-// MARK: - NetworkRequest
-
-/// A fully configured HTTP request ready to be executed.
-///
-/// Build requests using the fluent API, or use ``Network`` for one-liners:
-///
-/// ```swift
-/// // One-liner
-/// let user: User = try await Network.get("https://api.example.com/me")
-///
-/// // Custom request
-/// let request = NetworkRequest(url: "https://api.example.com/users")
-///     .method(.post)
-///     .body(newUser)
-///     .header("X-App-Version", value: "1.0")
-///     .timeout(30)
-/// ```
+/// A structured representation of a network request in the ErsanQ ecosystem.
 public struct NetworkRequest: Sendable {
-
-    // MARK: - Properties
-
-    public let urlString: String
-    public var method: HTTPMethod = .get
-    public var headers: [String: String] = [:]
-    public var body: Data?
-    public var timeoutInterval: TimeInterval = 30
-    public var queryItems: [URLQueryItem] = []
-
-    // MARK: - Init
-
-    public init(url: String) {
-        self.urlString = url
+    
+    /// The relative path of the endpoint (e.g., "/v1/users").
+    public let path: String
+    /// The HTTP method to use for the request.
+    public let method: HTTPMethod
+    /// URL query parameters.
+    public let queryItems: [URLQueryItem]?
+    /// Custom HTTP headers.
+    public let headers: [String: String]?
+    /// The body data for POST/PUT requests.
+    public let body: Data?
+    
+    /// Creates a new NetworkRequest.
+    ///
+    /// - Parameters:
+    ///   - path: The endpoint path.
+    ///   - method: The HTTP verb.
+    ///   - queryItems: Optional URL parameters.
+    ///   - headers: Optional request headers.
+    ///   - body: Optional body data.
+    public init(
+        path: String,
+        method: HTTPMethod = .get,
+        queryItems: [URLQueryItem]? = nil,
+        headers: [String: String]? = nil,
+        body: Data? = nil
+    ) {
+        self.path = path
+        self.method = method
+        self.queryItems = queryItems
+        self.headers = headers
+        self.body = body
     }
-
-    // MARK: - Fluent Builder
-
-    /// Sets the HTTP method.
-    public func method(_ method: HTTPMethod) -> NetworkRequest {
-        var copy = self; copy.method = method; return copy
-    }
-
-    /// Adds a single header.
-    public func header(_ key: String, value: String) -> NetworkRequest {
-        var copy = self; copy.headers[key] = value; return copy
-    }
-
-    /// Sets multiple headers at once.
-    public func headers(_ headers: [String: String]) -> NetworkRequest {
-        var copy = self
-        headers.forEach { copy.headers[$0.key] = $0.value }
-        return copy
-    }
-
-    /// Sets the request body from a `Codable` object (JSON-encoded).
-    public func body<T: Encodable>(_ value: T, encoder: JSONEncoder = .init()) throws -> NetworkRequest {
-        var copy = self
-        copy.body = try encoder.encode(value)
-        copy.headers["Content-Type"] = "application/json"
-        return copy
-    }
-
-    /// Sets the request body from raw `Data`.
-    public func body(_ data: Data) -> NetworkRequest {
-        var copy = self; copy.body = data; return copy
-    }
-
-    /// Adds a URL query parameter.
-    public func query(_ key: String, value: String) -> NetworkRequest {
-        var copy = self
-        copy.queryItems.append(URLQueryItem(name: key, value: value))
-        return copy
-    }
-
-    /// Sets the request timeout in seconds.
-    public func timeout(_ seconds: TimeInterval) -> NetworkRequest {
-        var copy = self; copy.timeoutInterval = seconds; return copy
-    }
-
-    // MARK: - Build URLRequest
-
-    func buildURLRequest() throws -> URLRequest {
-        guard var components = URLComponents(string: urlString) else {
-            throw NetworkError.invalidURL(urlString)
+    
+    /// Internal helper to transform the `NetworkRequest` into a native `URLRequest`.
+    func buildURLRequest(with baseURL: URL) throws -> URLRequest {
+        var url = baseURL.appendingPathComponent(path)
+        
+        if let queryItems = queryItems, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.queryItems = queryItems
+            if let newURL = components.url {
+                url = newURL
+            }
         }
-
-        if !queryItems.isEmpty {
-            components.queryItems = (components.queryItems ?? []) + queryItems
-        }
-
-        guard let url = components.url else {
-            throw NetworkError.invalidURL(urlString)
-        }
-
-        var request = URLRequest(url: url, timeoutInterval: timeoutInterval)
+        
+        var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         request.httpBody = body
-
-        // Default headers
-        if headers["Accept"] == nil {
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-        }
-
-        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
-
+        
+        headers?.forEach { request.addValue($1, forHTTPHeaderField: $0) }
+        
         return request
     }
+}
+
+/// Supported HTTP methods for NetworkKit.
+public enum HTTPMethod: String, Sendable {
+    case get = "GET"
+    case post = "POST"
+    case put = "PUT"
+    case delete = "DELETE"
+    case patch = "PATCH"
 }

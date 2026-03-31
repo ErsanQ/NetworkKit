@@ -1,59 +1,57 @@
 import Foundation
 
-/// A high-level, type-safe network client using Swift Concurrency.
-@MainActor
-public final class NetworkClient {
+/// A high-performance, asynchronous network client designed for the ErsanQ ecosystem.
+///
+/// `NetworkClient` provides a type-safe way to perform RESTful API requests using
+/// modern Swift concurrency features. It handles request encoding, response decoding,
+/// and error mapping automatically.
+///
+/// ## Usage
+/// ```swift
+/// let client = NetworkClient(baseURL: URL(string: "https://api.example.com")!)
+/// let user: User = try await client.execute(.getUser(id: 123))
+/// ```
+public final class NetworkClient: Sendable {
     
-    public static let shared = NetworkClient()
+    /// The base URL prepended to all relative request paths.
+    public let baseURL: URL
     private let session: URLSession
+    private let decoder: JSONDecoder
     
-    public init(session: URLSession = .shared) {
+    /// Creates a new NetworkClient instance.
+    ///
+    /// - Parameters:
+    ///   - baseURL: The root URL for all requests.
+    ///   - session: An optional custom `URLSession`. Defaults to `.shared`.
+    ///   - decoder: An optional custom `JSONDecoder`. Defaults to a standard decoder.
+    public init(baseURL: URL, session: URLSession = .shared, decoder: JSONDecoder = JSONDecoder()) {
+        self.baseURL = baseURL
         self.session = session
+        self.decoder = decoder
     }
     
-    /// Performs a GET request and decodes the response.
-    public func get<T: Decodable>(_ urlString: String) async throws -> T {
-        guard let url = URL(string: urlString) else {
-            throw NetworkError.invalidURL(urlString)
-        }
+    /// Executes a network request and decodes the response into a specified type.
+    ///
+    /// - Parameter request: A `NetworkRequest` object defining the endpoint and parameters.
+    /// - Returns: A decoded instance of the generic type `T`.
+    /// - Throws: `NetworkError` if the request fails or decoding fails.
+    public func execute<T: Decodable>(_ request: NetworkRequest) async throws -> T {
+        let urlRequest = try request.buildURLRequest(with: baseURL)
         
-        let (data, response) = try await session.data(from: url)
-        return try handleResponse(data: data, response: response)
-    }
-    
-    /// Performs a POST request with a body and decodes the response.
-    public func post<T: Decodable, B: Encodable>(_ urlString: String, body: B) async throws -> T {
-        guard let url = URL(string: urlString) else {
-            throw NetworkError.invalidURL(urlString)
-        }
+        let (data, response) = try await session.data(for: urlRequest)
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-        
-        let (data, response) = try await session.data(for: request)
-        return try handleResponse(data: data, response: response)
-    }
-    
-    private func handleResponse<T: Decodable>(data: Data, response: URLResponse) throws -> T {
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.unexpectedStatusCode(0)
+            throw NetworkError.invalidResponse
         }
         
-        switch httpResponse.statusCode {
-        case 200...299:
-            return try JSONDecoder().decode(T.self, from: data)
-        case 401:
-            throw NetworkError.unauthorized
-        case 403:
-            throw NetworkError.forbidden
-        case 404:
-            throw NetworkError.notFound
-        case 500...599:
-            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
-        default:
-            throw NetworkError.unexpectedStatusCode(httpResponse.statusCode)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw NetworkError.httpError(httpResponse.statusCode)
+        }
+        
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw NetworkError.decodingError(error)
         }
     }
 }
