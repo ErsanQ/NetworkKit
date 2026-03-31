@@ -1,35 +1,29 @@
 // swift-tools-version: 5.9
-
 import PackageDescription
 
 let package = Package(
     name: "NetworkKit",
+    defaultLocalization: "en",
     platforms: [
-        .iOS(.v16),
-        .macOS(.v13),
-        .tvOS(.v16),
-        .watchOS(.v9),
-        .visionOS(.v1)
+        .iOS(.v14),
+        .macOS(.v11),
+        .tvOS(.v14),
+        .watchOS(.v7)
     ],
     products: [
         .library(
             name: "NetworkKit",
-            targets: ["NetworkKit"]
-        ),
+            targets: ["NetworkKit"]),
     ],
+    dependencies: [],
     targets: [
         .target(
             name: "NetworkKit",
-            path: "Sources/NetworkKit",
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
-            ]
-        ),
+            dependencies: [],
+            path: "Sources/NetworkKit"),
         .testTarget(
             name: "NetworkKitTests",
             dependencies: ["NetworkKit"],
-            path: "Tests/NetworkKitTests"
-        ),
-    ],
-    swiftLanguageVersions: [.v5]
+            path: "Tests/NetworkKitTests"),
+    ]
 )
