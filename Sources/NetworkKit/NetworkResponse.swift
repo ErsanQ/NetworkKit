@@ -33,7 +33,7 @@ public struct NetworkResponse: Sendable {
         do {
             return try decoder.decode(type, from: data)
         } catch {
-            throw NetworkError.decodingFailed(error)
+            throw NetworkError.decodingError(error)
         }
     }
 

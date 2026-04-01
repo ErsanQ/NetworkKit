@@ -38,7 +38,7 @@ public enum Network {
     /// ```swift
     /// Network.shared.defaultHeaders["Authorization"] = "Bearer \(token)"
     /// ```
-    public static let shared = NetworkClient()
+    public static let shared = NetworkClient(baseURL: URL(string: "http://localhost")!)
 
     // MARK: - GET
 
@@ -47,7 +47,12 @@ public enum Network {
         _ url: String,
         query: [String: String] = [:]
     ) async throws -> T {
-        try await shared.get(url, query: query)
+        let request = NetworkRequest(
+            path: url,
+            method: .get,
+            queryItems: query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        )
+        return try await shared.execute(request)
     }
 
     // MARK: - POST
@@ -57,12 +62,14 @@ public enum Network {
         _ url: String,
         body: Body
     ) async throws -> Response {
-        try await shared.post(url, body: body)
+        let data = try JSONEncoder().encode(body)
+        let request = NetworkRequest(path: url, method: .post, body: data)
+        return try await shared.execute(request)
     }
 
     /// Sends a POST request and discards the response.
     public static func post<Body: Encodable>(_ url: String, body: Body) async throws {
-        try await shared.post(url, body: body)
+        let _: EmptyResponse = try await post(url, body: body)
     }
 
     // MARK: - PUT
@@ -72,7 +79,9 @@ public enum Network {
         _ url: String,
         body: Body
     ) async throws -> Response {
-        try await shared.put(url, body: body)
+        let data = try JSONEncoder().encode(body)
+        let request = NetworkRequest(path: url, method: .put, body: data)
+        return try await shared.execute(request)
     }
 
     // MARK: - PATCH
@@ -82,20 +91,32 @@ public enum Network {
         _ url: String,
         body: Body
     ) async throws -> Response {
-        try await shared.patch(url, body: body)
+        let data = try JSONEncoder().encode(body)
+        let request = NetworkRequest(path: url, method: .patch, body: data)
+        return try await shared.execute(request)
     }
 
     // MARK: - DELETE
 
     /// Sends a DELETE request.
     public static func delete(_ url: String) async throws {
-        try await shared.delete(url)
+        let request = NetworkRequest(path: url, method: .delete)
+        let _: EmptyResponse = try await shared.execute(request)
     }
 
     // MARK: - Custom Request
 
     /// Executes a custom ``NetworkRequest`` and returns the full ``NetworkResponse``.
     public static func response(for request: NetworkRequest) async throws -> NetworkResponse {
-        try await shared.response(for: request)
+        let urlRequest = try request.buildURLRequest(with: shared.baseURL)
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let http = response as? HTTPURLResponse else { throw NetworkError.invalidResponse }
+        return NetworkResponse(statusCode: http.statusCode, data: data, headers: http.allHeaderFields.reduce(into: [:]) { partial, item in
+            if let key = item.key as? String, let value = item.value as? String {
+                partial[key] = value
+            }
+        })
     }
 }
+
+private struct EmptyResponse: Codable {}
