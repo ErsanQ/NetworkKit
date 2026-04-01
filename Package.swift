@@ -24,7 +24,6 @@ let package = Package(
             path: "Sources/NetworkKit"),
         .testTarget(
             name: "NetworkKitTests",
-            dependencies: ["NetworkKit"],
-            path: "Tests/NetworkKitTests"),
+            dependencies: ["NetworkKit"]),
     ]
 )
